@@ -353,7 +353,7 @@ result[dsp].DSP错分++
 if(status=='上架')
 result[dsp].上架++
 
-if(['转运中心签入','站点签入'].includes(status))
+if(['转运中心签入','站点签入','转运中心签出'].includes(status))
 result[dsp].未拿到++
 
 if(status=='集包')
