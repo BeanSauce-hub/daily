@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>DSP Daily Dashboard</title>
+
+<!-- Excel parser -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+<style>
+:root{
+  --bg:#f5f7fb;
+  --card:#ffffff;
+  --bd:#e8eaef;
+  --txt:#111827;
+  --mut:#6b7280;
+  --accent:#111;
+  --danger:#d1242f;
+}
+
+*{box-sizing:border-box}
+
+body{
+  margin:0;
+  background:var(--bg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto;
+  color:var(--txt);
+}
+
+/* upload */
+
+#upload{
+  height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.drop{
+  border:2px dashed #d1d5db;
+  padding:70px 100px;
+  border-radius:18px;
+  text-align:center;
+  background:white;
+}
+
+.drop h1{
+  margin:0 0 20px;
+  font-weight:600;
+}
+
+.uploadBtn{
+  background:black;
+  color:white;
+  border:none;
+  padding:16px 40px;
+  font-size:18px;
+  border-radius:10px;
+  cursor:pointer;
+}
+
+/* dashboard */
+
+#dashboard{
+  display:none;
+  padding:30px;
+}
+
+.topbar{
+  display:flex;
+  gap:10px;
+  margin-bottom:15px;
+}
+
+.search{
+  padding:10px;
+  border:1px solid var(--bd);
+  border-radius:8px;
+}
+
+.export{
+  padding:10px 18px;
+  border:none;
+  background:black;
+  color:white;
+  border-radius:8px;
+  cursor:pointer;
+}
+
+.card{
+  background:var(--card);
+  border:1px solid var(--bd);
+  border-radius:14px;
+  overflow:auto;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+thead th{
+  position:sticky;
+  top:0;
+  background:#fafafa;
+  padding:14px;
+  text-align:center;
+  cursor:pointer;
+  border-bottom:1px solid var(--bd);
+}
+
+thead th:last-child{
+  text-align:left;
+  padding-left:10px;
+  width:35%;
+}
+
+tbody td{
+  padding:14px;
+  border-bottom:1px solid var(--bd);
+  text-align:center;
+}
+
+tbody tr:hover{
+  background:#fafafa;
+}
+
+.unreceived{
+  color:var(--danger);
+  font-weight:600;
+}
+
+/* tags */
+
+.tag{
+  padding:4px 10px;
+  border-radius:6px;
+  font-size:12px;
+}
+
+td:last-child{
+  display:flex;
+  justify-content:flex-start;
+  align-items:center;
+  gap:6px;
+  flex-wrap:wrap;
+  padding-left:0;
+}
+
+.missort{background:#fde2e2;color:#a40e26}
+.shelf{background:#fff4e5;color:#b45309}
+.not{background:#e5e7eb;color:#374151}
+.hub{background:#ede9fe;color:#5b21b6}
+
+.copied{
+  color:#16a34a;
+}
+
+.check{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:18px;
+  height:18px;
+  margin-left:6px;
+  border-radius:50%;
+  background:#16a34a;
+  color:white;
+  font-size:12px;
+  font-weight:700;
+  transform:scale(0.6);
+  opacity:0;
+}
+
+.check.animate{
+  animation:popCheck 0.35s ease forwards;
+}
+
+@keyframes popCheck{
+  0%{
+    transform:scale(0.6);
+    opacity:0;
+  }
+  60%{
+    transform:scale(1.2);
+    opacity:1;
+  }
+  100%{
+    transform:scale(1);
+    opacity:1;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<!-- upload -->
+
+<div id="upload">
+
+<div class="drop" id="drop">
+
+<h1>Upload DSP Report</h1>
+
+<button class="uploadBtn" onclick="file.click()">Select File</button>
+
+<input type="file" id="file" hidden>
+
+<p style="color:#6b7280;margin-top:15px">
+Excel / CSV
+</p>
+
+</div>
+
+</div>
+
+<!-- dashboard -->
+
+<div id="dashboard">
+
+<div class="topbar">
+
+<input class="search" placeholder="Search DSP" id="search">
+
+<button class="export" onclick="exportExcel()">Export Excel</button>
+
+</div>
+
+<div class="card">
+
+<table>
+
+<thead>
+<tr id="thead"></tr>
+</thead>
+
+<tbody id="tbody"></tbody>
+
+</table>
+
+</div>
+
+</div>
+
+<script>
+
+/* dsp order */
+
+const DSP=[
+"MIA-DRT",
+"MIA-ECL",
+"MIA-ELD",
+"MIA-GLP",
+"MIA-GOD",
+"MIA-JET",
+"MIA-OEC",
+"MIA-OTD",
+"MIA-PFC",
+"MIA-SDI",
+"MIA-SOX",
+"MIA-WME"
+]
+
+/* upload */
+
+file.onchange=e=>{
+readFile(e.target.files[0])
+}
+
+drop.ondragover=e=>{
+e.preventDefault()
+}
+
+drop.ondrop=e=>{
+e.preventDefault()
+readFile(e.dataTransfer.files[0])
+}
+
+/* read excel */
+
+function readFile(f){
+
+let reader=new FileReader()
+
+reader.onload=evt=>{
+
+let data=new Uint8Array(evt.target.result)
+
+let wb=XLSX.read(data,{type:"array"})
+
+let sheet=wb.Sheets[wb.SheetNames[0]]
+
+let rows=XLSX.utils.sheet_to_json(sheet)
+
+let result=calculate(rows)
+
+render(result)
+
+}
+
+reader.readAsArrayBuffer(f)
+
+}
+
+/* SQL logic */
+
+function calculate(rows){
+
+let result={}
+
+DSP.forEach(d=>{
+result[d]={
+set:new Set(),
+实领数量:0,
+异常取件:0,
+DSP错分:0,
+上架:0,
+未拿到:0,
+HUB滞留:0
+}
+})
+
+rows.forEach(r=>{
+
+let dspRaw=(r["派送方"] || "")
+      .replace(/\s/g,"")
+      .replace(/\u00A0/g,"")
+      .trim()
+
+// 找到匹配的 DSP
+let dsp = DSP.find(x => dspRaw.includes(x))
+
+// 如果不是我们要看的 DSP 就跳过
+if(!dsp) return
+
+let way=r["运单号"]
+let status=r["运单状态"]
+let receive=r["领取状态"]
+
+result[dsp].set.add(way)
+
+if(['签收','派送异常','快递员收件'].includes(status) && receive=='已领')
+result[dsp].实领数量++
+
+if(receive=='未领' && ['签收','派送异常','快递员收件'].includes(status))
+result[dsp].异常取件++
+
+if(['退回站点','退回转运中心'].includes(status))
+result[dsp].DSP错分++
+
+if(status=='上架')
+result[dsp].上架++
+
+if(['转运中心签入','站点签入'].includes(status))
+result[dsp].未拿到++
+
+if(status=='集包')
+result[dsp].HUB滞留++
+
+})
+
+return DSP.map(d=>{
+
+let r=result[d]
+
+let total=r.set.size
+
+let un=total-r.实领数量
+
+let tags=[]
+
+if(r.DSP错分>0) tags.push(`<span class="tag missort">DSP错分${r.DSP错分}</span>`)
+if(r.上架>0) tags.push(`<span class="tag shelf">上架${r.上架}</span>`)
+if(r.未拿到>0) tags.push(`<span class="tag not">未拿到${r.未拿到}</span>`)
+if(r.HUB滞留>0) tags.push(`<span class="tag hub">HUB滞留${r.HUB滞留}</span>`)
+
+return{
+派送方:d,
+总数量:total,
+实领数量:r.实领数量,
+未领数量:un,
+异常取件:r.异常取件,
+Comment:tags.join("")
+}
+
+})
+
+}
+
+/* render */
+
+let currentData=[]
+
+function render(data){
+
+upload.style.display="none"
+dashboard.style.display="block"
+
+currentData=data
+
+draw(data)
+
+}
+
+/* table */
+
+function draw(data){
+
+let columns=["派送方","总数量","实领数量","未领数量","异常取件","Comment"]
+
+thead.innerHTML=""
+tbody.innerHTML=""
+
+columns.forEach(c=>{
+
+let th=document.createElement("th")
+
+th.textContent=c
+
+th.onclick=()=>copyColumn(c,th)
+
+thead.appendChild(th)
+
+})
+
+data.forEach(r=>{
+
+let tr=document.createElement("tr")
+
+Object.values(r).forEach((v,i)=>{
+
+let td=document.createElement("td")
+
+if(i==3 && v>0) td.classList.add("unreceived")
+
+if(i==5) td.innerHTML=v
+else td.textContent=v
+
+tr.appendChild(td)
+
+})
+
+tbody.appendChild(tr)
+
+})
+
+}
+
+/* copy column */
+
+function copyColumn(name, th){
+
+let index=[...thead.children].findIndex(x=>x.textContent==name)
+
+let text
+
+if(name==="Comment"){
+
+text=[...tbody.rows].map(r=>{
+
+let tags=[...r.cells[index].querySelectorAll(".tag")]
+
+return tags.map(t=>t.innerText).join(", ")
+
+}).join("\n")
+
+}else{
+
+text=[...tbody.rows].map(r=>r.cells[index].innerText).join("\n")
+
+}
+
+navigator.clipboard.writeText(text)
+
+let old=th.textContent
+th.innerHTML='Copied <span class="check animate">✓</span>'
+th.classList.add("copied")
+
+setTimeout(()=>{
+th.textContent=old
+th.classList.remove("copied")
+},2000)
+
+}
+
+/* search */
+
+search.oninput=e=>{
+
+let v=e.target.value.toLowerCase()
+
+draw(currentData.filter(r=>r["派送方"].toLowerCase().includes(v)))
+
+}
+
+/* export */
+
+function exportExcel(){
+
+let ws=XLSX.utils.json_to_sheet(currentData)
+
+let wb=XLSX.utils.book_new()
+
+XLSX.utils.book_append_sheet(wb,ws,"Report")
+
+XLSX.writeFile(wb,"DSP_Report.xlsx")
+
+}
+
+</script>
+
+</body>
+</html>
